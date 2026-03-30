@@ -82,8 +82,8 @@ void runTimeStats() {
  * Main task to blink external LED
  * @param params - unused
  */
-#define NUM_LEDS 18    // 你要測試的 LED 數量
-int ledPins[NUM_LEDS] = {2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};  // 對應 GPIO 腳位
+#define NUM_LEDS 8    // 你要測試的 LED 數量
+int ledPins[NUM_LEDS] = {2,3,4,5,6,7,8,9};  // 對應 GPIO 腳位
 
 void mainTask(void *params){
     BlinkWorker* workers[NUM_LEDS];
