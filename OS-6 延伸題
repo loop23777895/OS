@@ -1,0 +1,110 @@
+#include "pico/stdlib.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include "hardware/structs/sio.h"
+
+#include "BlinkAgent.h"
+#include "CounterAgent.h"
+
+// Standard Task priority
+#define TASK_PRIORITY        ( tskIDLE_PRIORITY + 1UL )
+
+// LED PAD to use
+#define BLUE_LED_PAD         25
+#define LED1_PAD             2
+#define LED2_PAD             3
+#define LED3_PAD             4
+#define LED4_PAD             5
+#define LED5_PAD             6
+#define LED6_PAD             7
+#define LED7_PAD             8
+#define LED8_PAD             9
+
+void runTimeStats(){
+    TaskStatus_t *pxTaskStatusArray;
+    volatile UBaseType_t uxArraySize, x;
+    unsigned long ulTotalRunTime;
+
+    uxArraySize = uxTaskGetNumberOfTasks();
+    printf("Number of tasks %d\n", uxArraySize);
+
+    pxTaskStatusArray = (TaskStatus_t *)pvPortMalloc( uxArraySize * sizeof( TaskStatus_t ) );
+
+    if(pxTaskStatusArray != NULL){
+        uxArraySize = uxTaskGetSystemState(pxTaskStatusArray, uxArraySize, &ulTotalRunTime);
+
+        for(x = 0; x < uxArraySize; x++){
+            printf("Task: %d \t cPri:%d \t bPri:%d \t hw:%d \t%s\n",
+                pxTaskStatusArray[x].xTaskNumber,
+                pxTaskStatusArray[x].uxCurrentPriority,
+                pxTaskStatusArray[x].uxBasePriority,
+                pxTaskStatusArray[x].usStackHighWaterMark,
+                pxTaskStatusArray[x].pcTaskName
+            );
+        }
+        vPortFree(pxTaskStatusArray);
+    } else {
+        printf("Failed to allocate space for stats\n");
+    }
+}
+
+void mainTask(void *params){
+    // 藍色 LED
+    BlinkAgent blueBlink(BLUE_LED_PAD);
+
+    // 8 顆 LED 組
+    CounterAgent counter(LED1_PAD, LED2_PAD, LED3_PAD, LED4_PAD,
+                         LED5_PAD, LED6_PAD, LED7_PAD, LED8_PAD);
+
+    printf("Main task started\n");
+
+    blueBlink.start("BlueBlink", TASK_PRIORITY);
+    counter.start("Counter", TASK_PRIORITY);
+
+    // 綁定藍色 LED 到 CORE 0
+    UBaseType_t coreMask = 0x1;
+    vTaskCoreAffinitySet(blueBlink.getTask(), coreMask);
+
+    // 綁定 8 顆 LED 組到 CORE 1
+    coreMask = 0x2;
+    vTaskCoreAffinitySet(counter.getTask(), coreMask);
+
+    while(true){
+        runTimeStats();
+        printf("Main on Core %ld\n", sio_hw->cpuid);
+
+        uint8_t r = rand() & 0xFF;
+        counter.on(r);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
+void vLaunch(void){
+    TaskHandle_t task;
+    xTaskCreate(mainTask, "MainThread", 1024, NULL, TASK_PRIORITY, &task);
+    vTaskStartScheduler();
+}
+
+int main(void){
+    stdio_init_all();
+    sleep_ms(2000);
+    printf("GO\n");
+
+    const char *rtos_name;
+#if ( portSUPPORT_SMP == 1 )
+    rtos_name = "FreeRTOS SMP";
+#else
+    rtos_name = "FreeRTOS";
+#endif
+
+#if ( portSUPPORT_SMP == 1 ) && ( configNUM_CORES == 2 )
+    printf("%s on both cores:\n", rtos_name);
+#else
+    printf("Starting %s on core 0:\n", rtos_name);
+#endif
+
+    vLaunch();
+    return 0;
+}
